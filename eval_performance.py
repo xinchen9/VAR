@@ -11,7 +11,7 @@ setattr(torch.nn.LayerNorm, 'reset_parameters', lambda self: None)
 
 from models import VQVAE, build_vae_var
 
-depths = {20,24,30}
+depths = {30}
 hf_home = "/mnt/disk4/xinchen/models/var"
 vae_ckpt = 'vae_ch160v4096z32.pth'
 vae_ckpt = hf_home + '/' + vae_ckpt
@@ -76,10 +76,15 @@ for model_depth in depths:
     chw = torchvision.utils.make_grid(recon_B3HW, nrow=8, padding=0, pad_value=1.0)
     chw = chw.permute(1, 2, 0).mul_(255).cpu().numpy()
     chw = PImage.fromarray(chw.astype(np.uint8))
-    chw.save("my_image.png")
-    print("finish save image")
+    img_name = f'image_{model_depth}.png'
+    chw.save(img_name)
+    key_averages_filename=f'key_averages_{model_depth}.txt'
+    with open(key_averages_filename, "w") as f:
+        f.write(prof.key_averages().table(sort_by=sort_by_keyword, row_limit=-1))
+    print(f"Key averages saved to '{key_averages_filename}'")
+    f.close()
+    
+    print(f"finish save image at {model_depth}")
 
     # import pdb
     # pdb.set_trace()
-
-# "/mnt/disk4/xinchen/models/var"
