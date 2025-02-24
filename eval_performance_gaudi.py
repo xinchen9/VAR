@@ -5,19 +5,22 @@ import random
 import numpy as np
 import PIL.Image as PImage, PIL.ImageDraw as PImageDraw
 from torch.profiler import profile, record_function, ProfilerActivity
+import habana_frameworks.torch.core as htcore
 
 setattr(torch.nn.Linear, 'reset_parameters', lambda self: None) 
 setattr(torch.nn.LayerNorm, 'reset_parameters', lambda self: None)
 
 from models import VQVAE, build_vae_var
+import time
 
 depths = {30}
-hf_home = "/mnt/disk4/xinchen/models/var"
+hf_home = "../models"
 vae_ckpt = 'vae_ch160v4096z32.pth'
 vae_ckpt = hf_home + '/' + vae_ckpt
 
 patch_nums = (1, 2, 3, 4, 5, 6, 8, 10, 13, 16)
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+# device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = torch.device('hpu')
 
 
 for model_depth in depths:
@@ -64,25 +67,44 @@ for model_depth in depths:
 
     # sample
     B = len(class_labels)
-    activities = [ProfilerActivity.CUDA]
-    sort_by_keyword = "self_" + device + "_time_total"
+    # activities = [ProfilerActivity.CUDA]
+    activities = [torch.profiler.ProfilerActivity.CPU]
+    activities.append(torch.profiler.ProfilerActivity.HPU)
+    # sort_by_keyword = "self_" + device + "_time_total"
     label_B: torch.LongTensor = torch.tensor(class_labels, device=device)
-    with profile(activities=activities, record_shapes=True) as prof:
-        with record_function("model_inference"):
-            with torch.inference_mode():
-                with torch.autocast('cuda', enabled=True, dtype=torch.float16, cache_enabled=True):    # using bfloat16 can be faster
-                    recon_B3HW = var.autoregressive_infer_cfg(B=B, label_B=label_B, cfg=cfg, top_k=900, top_p=0.95, g_seed=seed, more_smooth=more_smooth)
+    starttime = time.time()
+    with torch.inference_mode():
+        with torch.autocast(device_type='hpu', enabled=True, dtype=torch.float16, cache_enabled=True):    # using bfloat16 can be faster
+                recon_B3HW = var.autoregressive_infer_cfg(B=B, label_B=label_B, cfg=cfg, top_k=900, top_p=0.95, g_seed=seed, more_smooth=more_smooth)
 
+    total_time = time.time() - starttime
+    print(f"total_time = {total_time}")
+
+    #Can't work for habana profiler from line 74-86 
+    # with torch.profiler.profile(
+    # schedule=torch.profiler.schedule(wait=0, warmup=20, active=5, repeat=1),
+    # activities=activities,
+    # on_trace_ready=torch.profiler.tensorboard_trace_handler('./profile_logs')) as prof:
+    # # with profile(activities=activities, record_shapes=True) as prof:
+    #     with record_function("model_inference"):
+    #         with torch.inference_mode():
+    # #             # with torch.autocast('cuda', enabled=True, dtype=torch.float16, cache_enabled=True):    # using bfloat16 can be faster
+    #             with torch.autocast(device_type='hpu', enabled=True, dtype=torch.float16, cache_enabled=True):    # using bfloat16 can be faster
+    #                 recon_B3HW = var.autoregressive_infer_cfg(B=B, label_B=label_B, cfg=cfg, top_k=900, top_p=0.95, g_seed=seed, more_smooth=more_smooth)
+    #                 htcore.mark_step()
+    #                 prof.step()
+    # import pdb
+    # pdb.set_trace()
     chw = torchvision.utils.make_grid(recon_B3HW, nrow=8, padding=0, pad_value=1.0)
     chw = chw.permute(1, 2, 0).mul_(255).cpu().numpy()
     chw = PImage.fromarray(chw.astype(np.uint8))
-    img_name = f'image_{model_depth}.png'
+    img_name = f'image_{model_depth}_gaudi.png'
     chw.save(img_name)
-    key_averages_filename=f'key_averages_{model_depth}.txt'
-    with open(key_averages_filename, "w") as f:
-        f.write(prof.key_averages().table(sort_by=sort_by_keyword, row_limit=10))
-    print(f"Key averages saved to '{key_averages_filename}'")
-    f.close()
+    # key_averages_filename=f'key_averages_{model_depth}_gaudi.txt'
+    # with open(key_averages_filename, "w") as f:
+    #     f.write(total_time)
+    # print(f"Key averages saved to '{key_averages_filename}'")
+    # f.close()
     
     print(f"finish save image at {model_depth}")
 
