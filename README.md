@@ -152,6 +152,12 @@ Then use the [OpenAI's FID evaluation toolkit](https://github.com/openai/guided-
 Note a relatively small `cfg=1.5` is used for trade-off between image quality and diversity. You can adjust it to `cfg=5.0`, or sample with `autoregressive_infer_cfg(..., more_smooth=True)` for **better visual quality**.
 We'll provide the sampling script later.
 
+## Gaudi Test
+first setup as lazy model
+export PT_HPU_LAZY_MODE=0
+Gaudi drivers: 1.19.1
+Docker image: vault.habana.ai/gaudi-docker/1.19.1/ubuntu22.04/habanalabs/pytorch-installer-2.5.1
+
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
