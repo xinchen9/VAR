@@ -5,6 +5,7 @@ import random
 import numpy as np
 import PIL.Image as PImage, PIL.ImageDraw as PImageDraw
 from torch.profiler import profile, record_function, ProfilerActivity
+import habana_frameworks.torch as ht
 import habana_frameworks.torch.core as htcore
 
 setattr(torch.nn.Linear, 'reset_parameters', lambda self: None) 
@@ -28,7 +29,8 @@ for model_depth in depths:
     if 'vae' not in globals() or 'var' not in globals():
         vae, var = build_vae_var(
             V=4096, Cvae=32, ch=160, share_quant_resi=4,    # hard-coded VQVAE hyperparameters
-            device=device, patch_nums=patch_nums,
+            # device=device, patch_nums=patch_nums,
+            device='cpu', patch_nums=patch_nums,
             num_classes=1000, depth=model_depth, shared_aln=False,
         )
     var_ckpt = f'var_d{model_depth}.pth'
@@ -38,9 +40,20 @@ for model_depth in depths:
     vae.load_state_dict(torch.load(vae_ckpt, map_location='cpu'), strict=True)
     var.load_state_dict(torch.load(var_ckpt, map_location='cpu'), strict=True)
     # vae.eval(), var.eval()
-    vae.eval().to("hpu"), var.eval().to("hpu")
+    #Added By Xin Chen
+    vae = vae.eval()
+    # var = var.eval()
+    #End by Xin Chen
     for p in vae.parameters(): p.requires_grad_(False)
+    vae.to("hpu")
+    htcore.mark_step()
+
+    var = var.eval()
     for p in var.parameters(): p.requires_grad_(False)
+    # vae = ht.hpu.wrap_in_hpu_graph(vae)
+    # var = ht.hpu.wrap_in_hpu_graph(var)
+    var.to("hpu")
+    htcore.mark_step()
     print(f'prepare finished.')  
 
     ############################# 2. Sample with classifier-free guidance
@@ -74,10 +87,13 @@ for model_depth in depths:
     # sort_by_keyword = "self_" + device + "_time_total"
     label_B: torch.LongTensor = torch.tensor(class_labels, device=device)
     label_B.to("hpu")
+    htcore.mark_step()
     starttime = time.time()
     with torch.inference_mode():
         # with torch.autocast(device_type='hpu', enabled=True, dtype=torch.float16, cache_enabled=True):    # using bfloat16 can be faster
         recon_B3HW = var.autoregressive_infer_cfg(B=B, label_B=label_B, cfg=cfg, top_k=900, top_p=0.95, g_seed=seed, more_smooth=more_smooth)
+
+    htcore.mark_step()
 
     total_time = time.time() - starttime
     print(f"total_time = {total_time}")
