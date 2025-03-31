@@ -15,7 +15,7 @@ from models import VQVAE, build_vae_var
 import time
 
 depths = {30}
-hf_home = "/xinchen/models"
+hf_home = "../models"
 vae_ckpt = 'vae_ch160v4096z32.pth'
 vae_ckpt = hf_home + '/' + vae_ckpt
 
@@ -63,7 +63,8 @@ for model_depth in depths:
     torch.manual_seed(seed)
     num_sampling_steps = 250 #@param {type:"slider", min:0, max:1000, step:1}
     cfg = 4 #@param {type:"slider", min:1, max:10, step:0.1}
-    class_labels = (980, 980, 437, 437, 22, 22, 562, 562)  #@param {type:"raw"}
+    # class_labels = (980, 980, 437, 437, 22, 22, 562, 562)  #@param {type:"raw"}
+    class_labels = (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)  #@param {type:"raw"}
     more_smooth = False # True for more smooth output
 
     # seed
